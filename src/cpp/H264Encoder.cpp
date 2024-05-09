@@ -13,6 +13,7 @@
 
 #include "H264Encoder.h"
 
+
 using libcamera::ColorSpace;
 using libcamera::FrameBuffer;
 using libcamera::StreamConfiguration;
@@ -22,11 +23,12 @@ using logging::Logger;
 using namespace std::chrono_literals;
 
 int H264Encoder::get_v4l2_colorspace(std::optional<ColorSpace> const &cs) {
-	if (cs == ColorSpace::Rec709)
+	if (cs == ColorSpace::Rec709) {
 		return V4L2_COLORSPACE_REC709;
-	else if (cs == ColorSpace::Smpte170m)
+   } else if (cs == ColorSpace::Smpte170m) {
 		return V4L2_COLORSPACE_SMPTE170M;
-
+   }
+   
 	return V4L2_COLORSPACE_SMPTE170M;
 }
 
@@ -273,8 +275,7 @@ void H264Encoder::encode(FrameBuffer *frameBuffer, int64_t timestamp_us) {
 }
 
 void H264Encoder::pollThread() {
-	while (true)
-	{
+	while (true) {
       pollfd p = { encoderFileDescriptor, POLLIN, 0 };
 		// wait for data to read (POLLIN) on one file description and timeout
       // after 200 ms.
@@ -289,15 +290,13 @@ void H264Encoder::pollThread() {
 				break;
          }
 		}
-		if (returnValue == -1)
-		{
+		if (returnValue == -1) {
 			if (errno == EINTR) {
 				continue;
          }
 			throw std::runtime_error("unexpected errno " + std::to_string(errno) + " from poll");
 		}
-		if (p.revents & POLLIN) // data ready to read
-		{
+		if (p.revents & POLLIN) { // data ready to read
 			v4l2_buffer buf = {};
 			v4l2_plane planes[VIDEO_MAX_PLANES] = {};
          
@@ -308,10 +307,8 @@ void H264Encoder::pollThread() {
          
          // VIDIOC_DQBUF = dequeue a buffer from the driver’s outgoing queue
 			if (applyDeviceParam(VIDIOC_DQBUF, &buf)) {
-				{
-					std::lock_guard<std::mutex> lock(inputBufferAvailableMutex);
-					availableInputBuffers.push(buf.index);
-				}
+            std::lock_guard<std::mutex> lock(inputBufferAvailableMutex);
+            availableInputBuffers.push(buf.index);
 			}
 
 			buf = {};
@@ -343,8 +340,7 @@ void H264Encoder::pollThread() {
 
 void H264Encoder::outputThread() {
 	OutputItem item;
-	while (true)
-	{
+	while (true) {
 		{
 			std::unique_lock<std::mutex> lock(output_mutex_);
 			while (true) {

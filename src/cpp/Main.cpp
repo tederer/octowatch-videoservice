@@ -60,6 +60,11 @@ class Impl {
          }
       }
       
+      void stopVideoStreams() {
+         h264Stream.reset();
+         mpjegStream.reset();
+      }
+      
       void updateCameraState() {
          if (!mpjpegConnected && !h264Connected) {
             camera.stop();
@@ -107,7 +112,7 @@ class Impl {
          
          if (mpjpegConnected) {
             currentTaskId = getNextTaskId();
-            log.debug("enqueuing task", currentTaskId);
+            log.debug("enqueuing task", currentTaskId, "for execution in separate thread");
             executor.execute([this, lowResolutionFrameBuffer](){
                mpjegStream->send(lowResolutionFrameBuffer);
             }, currentTaskId);
@@ -121,8 +126,7 @@ class Impl {
       void systemTemperatureTooHigh(bool tooHigh) {
          log.info("system temperature is", (tooHigh ? "too high -> stopping video streams" : "in allowed range"));
          if (tooHigh) {
-            h264Stream.reset();
-            mpjegStream.reset();
+            stopVideoStreams();
          } else {
             startVideoStreams();
          }

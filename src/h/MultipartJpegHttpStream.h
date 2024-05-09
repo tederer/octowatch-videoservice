@@ -38,6 +38,11 @@ class MultipartJpegHttpStream : network::TcpServer::Listener {
       
       void start();
       
+      /**
+       * Converts the provided frame and sends it as part of the MPJPEG stream.
+       * The frameBuffer object can get freed or reused as soon as this method
+       * returns. 
+       */
       void send(libcamera::FrameBuffer *frameBuffer);
       
       // callbacks of the listener interface of the TcpServer

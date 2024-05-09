@@ -15,7 +15,7 @@
 #define NUM_OUTPUT_BUFFERS    6
 #define NUM_CAPTURE_BUFFERS   12
 
-typedef std::function<void(void    *data,       // point to the data of the NAL
+typedef std::function<void(void    *data,       // pointer to the data of the NAL
                            size_t  bytesCount,  // size of the NAL in bytes
                            int64_t timestamp,   
                            bool    keyframe)>  OutputReadyCallback;
@@ -27,9 +27,9 @@ class H264Encoder {
       ~H264Encoder();
 
       /**
-       * Gets called as soon as a NAL is ready for sending.
+       * The callback gets called as soon as a NAL is ready for sending.
        *
-       * ATTENTION: The data pointer is only valid as long as your
+       * ATTENTION: The data pointer is only valid as long as you are
        *            in the callback!
        */
       void setOutputReadyCallback(OutputReadyCallback callback);

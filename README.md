@@ -8,7 +8,7 @@ video service of the OctoWatch underwater camera
 |----------------------|------------------------------------|---------------|---------------------------------------------|
 |OCTOWATCH_LOG_LEVEL   | [DEBUG, INFO, WARNING, ERROR, OFF] | INFO          | log level                                   |
 |OCTOWATCH_JPEG_QUALITY| integer in the range [0, 100]      | 95            | JPEG image quality                          |
-|OCTOWATCH_JPEG_ENCODER| [CPU, <emptyString>]               | <emptyString> | whether to use CPU or hardware JPEG encoder |
+|OCTOWATCH_JPEG_ENCODER| [CPU, emptyString]                 | emptyString   | whether to use CPU or hardware JPEG encoder |
 
 ## References
 

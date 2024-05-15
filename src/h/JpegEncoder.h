@@ -1,52 +1,28 @@
-#ifndef JPEG_ENCODER_H
-#define JPEG_ENCODER_H
+#ifndef JPEGENCODER_H
+#define JPEGENCODER_H
 
-#include <cstdint>
-#include <stdio.h>
-// stdio.h needs to get included before jpeglib.h 
-// (see https://raw.githubusercontent.com/libjpeg-turbo/libjpeg-turbo/main/libjpeg.txt)
-#include <jpeglib.h>
+#include <functional>
 
-#include "libcamera/stream.h"
+#include "libcamera/framebuffer.h"
 
-#include "Logging.h"
-
-#if JPEG_LIB_VERSION_MAJOR > 9 || (JPEG_LIB_VERSION_MAJOR == 9 && JPEG_LIB_VERSION_MINOR >= 4)
-typedef size_t jpeg_mem_len_t;
-#else
-typedef unsigned long jpeg_mem_len_t;
-#endif
+/** 
+ * ATTENTION: The data pointer is only valid as long as you are in the callback!
+ */
+typedef std::function<void(void    *data,       // pointer to the data of the NAL
+                           size_t  bytesCount,  // size of the NAL in bytes
+                           int64_t timestamp_us)>  JpegOutputReadyCallback;
 
 class JpegEncoder {
    public:
-      struct JpegImage {
-         void*        data;
-         unsigned int size;
-      };
-      
       /**
-       * quality        range [0,100]
+       * The callback gets called as soon as a NAL is ready for sending.
        */
-      JpegEncoder(libcamera::StreamConfiguration const &streamConfig, int quality);
-      
-      ~JpegEncoder();
-      
+      virtual void setOutputReadyCallback(JpegOutputReadyCallback callback) = 0;
+
       /**
-       * Uses the provided YUV420 data of a frame to create a JPEG.
-       * The returned struct contains a pointer to the data and the
-       * its length. 
-       *
-       * ATTENTION: The receiver is responsible to free the returned memory!       
+       * Provides a new frame to the encoder for encoding.
        */
-      JpegImage encode(void* yuv420Data, unsigned int length);
-      
-   private:
-      logging::Logger             log;
-      struct jpeg_error_mgr       jerr;
-      struct jpeg_compress_struct cinfo;
-      unsigned int                inputHeight;
-      unsigned int                inputStride;
-      bool                        firstFrame;
+      virtual void encode(libcamera::FrameBuffer *frameBuffer, int64_t timestamp_us) = 0;
 };
 
 #endif

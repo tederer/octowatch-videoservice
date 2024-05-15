@@ -131,7 +131,7 @@ bool Camera::initialize() {
                                             
    streamConfigs->at(LOW_RESOLUTION).pixelFormat  = libcamera::formats::YUV420;
    streamConfigs->at(LOW_RESOLUTION).size.width   = 800;
-   streamConfigs->at(LOW_RESOLUTION).size.height  = 600;
+   streamConfigs->at(LOW_RESOLUTION).size.height  = 608;
    streamConfigs->at(LOW_RESOLUTION).colorSpace   = libcamera::ColorSpace::Rec709;
                                            
    streamConfigs->sensorConfig                    = libcamera::SensorConfiguration();

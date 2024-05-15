@@ -43,7 +43,7 @@ class MultipartJpegHttpStream : network::TcpServer::Listener {
        * The frameBuffer object can get freed or reused as soon as this method
        * returns. 
        */
-      void send(libcamera::FrameBuffer *frameBuffer);
+      void send(libcamera::FrameBuffer *frameBuffer, int64_t timestamp_us);
       
       // callbacks of the listener interface of the TcpServer
       void onNewConnection(std::unique_ptr<network::Connection> connection) override;
@@ -55,6 +55,8 @@ class MultipartJpegHttpStream : network::TcpServer::Listener {
    private:
       void sendJpeg(void *data, size_t size);
       
+      void onJpegAvailable(void *data, size_t bytesCount, int64_t timestamp);
+
       logging::Logger                      log;
       std::unique_ptr<JpegEncoder>         jpegEncoder;
       std::unique_ptr<network::TcpServer>  tcpServer;

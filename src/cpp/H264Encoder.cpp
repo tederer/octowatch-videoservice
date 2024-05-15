@@ -22,27 +22,15 @@ using logging::Logger;
 
 using namespace std::chrono_literals;
 
-int H264Encoder::get_v4l2_colorspace(std::optional<ColorSpace> const &cs) {
-	if (cs == ColorSpace::Rec709) {
-		return V4L2_COLORSPACE_REC709;
-   } else if (cs == ColorSpace::Smpte170m) {
-		return V4L2_COLORSPACE_SMPTE170M;
+void H264Encoder::v4l2Cmd(unsigned long ctl, void *arg, std::string errorMessage) {
+   if (v4l2CommandError) {
+      return;
    }
    
-	return V4L2_COLORSPACE_SMPTE170M;
-}
-
-bool H264Encoder::applyDeviceParam(unsigned long ctl, void *arg) {
-	int returnValue;
-   int remainingIterations = 10;
-   
-	do {
-		returnValue = ioctl(encoderFileDescriptor, ctl, arg);
-	} while ((returnValue == -1) && (errno == EINTR) && (remainingIterations-- > 0));
-   
-   if (returnValue == -1) {
+	if (ioctl(encoderFileDescriptor, ctl, arg) == -1) {
+      v4l2CommandError = true;
       std::ostringstream logMessage;
-      logMessage << "ioctl failed: ";
+      logMessage << "ERROR: " << errorMessage << ": ";
       switch(errno) {
          case EBADF: logMessage << "file descriptor is not a valid file descriptor (EBADF)";
                      break;
@@ -53,10 +41,18 @@ bool H264Encoder::applyDeviceParam(unsigned long ctl, void *arg) {
          case ENOTTY: logMessage << "file descriptor is not associated with a character special device (ENOTTY)";
                      break;
       }
-      log.error(logMessage.str());
+      throw std::runtime_error(logMessage.str());
+   }
+}
+
+int H264Encoder::get_v4l2_colorspace(std::optional<ColorSpace> const &libcameraColorSpace) {
+	if (libcameraColorSpace == ColorSpace::Rec709) {
+		return V4L2_COLORSPACE_REC709;
+   } else if (libcameraColorSpace == ColorSpace::Smpte170m) {
+		return V4L2_COLORSPACE_SMPTE170M;
    }
    
-	return (returnValue == 0);
+	return V4L2_COLORSPACE_SMPTE170M;
 }
 
 void H264Encoder::setOutputReadyCallback(OutputReadyCallback callback) {
@@ -64,7 +60,7 @@ void H264Encoder::setOutputReadyCallback(OutputReadyCallback callback) {
 }
 
 H264Encoder::H264Encoder(StreamConfiguration const &streamConfig)
-	: log("H264Encoder"), abortPoll_(false), abortOutput_(false) {
+	: log("H264Encoder"), quitPollThread(false), quitOutputThread(false), v4l2CommandError(false) {
       
    std::string deviceName = "/dev/video11";
 	encoderFileDescriptor = open(deviceName.c_str(), O_RDWR, 0);
@@ -75,12 +71,11 @@ H264Encoder::H264Encoder(StreamConfiguration const &streamConfig)
 
 	v4l2_control ctrl = {};
 	
-   ctrl.id = V4L2_CID_MPEG_VIDEO_REPEAT_SEQ_HEADER;
+   ctrl.id    = V4L2_CID_MPEG_VIDEO_REPEAT_SEQ_HEADER;
    ctrl.value = 1;
-   if (!applyDeviceParam(VIDIOC_S_CTRL, &ctrl)) {
-      throw std::runtime_error("failed to set inline headers");
-   }
-	
+   
+   v4l2Cmd(VIDIOC_S_CTRL, &ctrl, "failed to set inline headers");
+   
 	v4l2_format fmt = {};
 	fmt.type                                  = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 	fmt.fmt.pix_mp.width                      = streamConfig.size.width;
@@ -91,9 +86,7 @@ H264Encoder::H264Encoder(StreamConfiguration const &streamConfig)
 	fmt.fmt.pix_mp.colorspace                 = get_v4l2_colorspace(streamConfig.colorSpace);
 	fmt.fmt.pix_mp.num_planes                 = 1;
 	
-   if (!applyDeviceParam(VIDIOC_S_FMT, &fmt)) {
-		throw std::runtime_error("failed to set output format");
-   }
+   v4l2Cmd(VIDIOC_S_FMT, &fmt, "failed to set output format");
    
 	fmt = {};
 	fmt.type                                  = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
@@ -106,9 +99,7 @@ H264Encoder::H264Encoder(StreamConfiguration const &streamConfig)
 	fmt.fmt.pix_mp.plane_fmt[0].bytesperline  = 0;
 	fmt.fmt.pix_mp.plane_fmt[0].sizeimage     = 512 << 10;
    
-	if (!applyDeviceParam(VIDIOC_S_FMT, &fmt)) {
-		throw std::runtime_error("failed to set capture format");
-   }
+	v4l2Cmd(VIDIOC_S_FMT, &fmt, "failed to set capture format");
    
 	double framerate            = 30;
    struct v4l2_streamparm parm = {};
@@ -116,18 +107,15 @@ H264Encoder::H264Encoder(StreamConfiguration const &streamConfig)
    parm.parm.output.timeperframe.numerator   = 90000.0 / framerate;
    parm.parm.output.timeperframe.denominator = 90000;
    
-   if (!applyDeviceParam(VIDIOC_S_PARM, &parm)) {
-      throw std::runtime_error("failed to set streamparm");
-   }
-
+   v4l2Cmd(VIDIOC_S_PARM, &parm, "failed to set streamparm");
+   
 	v4l2_requestbuffers reqbufs = {};
-	reqbufs.count               = NUM_OUTPUT_BUFFERS;
+	reqbufs.count               = H264_INPUT_BUFFER_COUNT;
 	reqbufs.type                = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 	reqbufs.memory              = V4L2_MEMORY_DMABUF;
    
-	if (!applyDeviceParam(VIDIOC_REQBUFS, &reqbufs)) {
-		throw std::runtime_error("request for output buffers failed");
-   }
+	v4l2Cmd(VIDIOC_REQBUFS, &reqbufs, "request for output buffers failed");
+   
 	log.info("Got", reqbufs.count, "output buffers");
 
 	for (unsigned int i = 0; i < reqbufs.count; i++) {
@@ -135,98 +123,59 @@ H264Encoder::H264Encoder(StreamConfiguration const &streamConfig)
    }
    
 	reqbufs        = {};
-	reqbufs.count  = NUM_CAPTURE_BUFFERS;
+	reqbufs.count  = H264_OUTPUT_BUFFER_COUNT;
 	reqbufs.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 	reqbufs.memory = V4L2_MEMORY_MMAP;
-	if (!applyDeviceParam(VIDIOC_REQBUFS, &reqbufs)) {
-		throw std::runtime_error("request for capture buffers failed");
-   }
+	v4l2Cmd(VIDIOC_REQBUFS, &reqbufs, "request for capture buffers failed");
+   
 	log.info("Got", reqbufs.count, "capture buffers");
-	num_capture_buffers_ = reqbufs.count;
-
+	
 	for (unsigned int i = 0; i < reqbufs.count; i++) {
 		v4l2_plane planes[VIDEO_MAX_PLANES];
 		v4l2_buffer buffer = {};
-		buffer.type       = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-		buffer.memory     = V4L2_MEMORY_MMAP;
-		buffer.index      = i;
-		buffer.length     = 1;
-		buffer.m.planes   = planes;
+		buffer.type        = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+		buffer.memory      = V4L2_MEMORY_MMAP;
+		buffer.index       = i;
+		buffer.length      = 1;
+		buffer.m.planes    = planes;
       
-		if (!applyDeviceParam(VIDIOC_QUERYBUF, &buffer)) {
-			throw std::runtime_error("failed to capture query buffer " + std::to_string(i));
-      }
-		buffers_[i].mem = mmap(0, buffer.m.planes[0].length, PROT_READ | PROT_WRITE, MAP_SHARED, encoderFileDescriptor,
+		v4l2Cmd(VIDIOC_QUERYBUF, &buffer, "failed to capture query buffer " + std::to_string(i));
+      
+		outputBufferData[i] = mmap(0, buffer.m.planes[0].length, PROT_READ | PROT_WRITE, MAP_SHARED, encoderFileDescriptor,
 							   buffer.m.planes[0].m.mem_offset);
-		if (buffers_[i].mem == MAP_FAILED) {
+		if (outputBufferData[i] == MAP_FAILED) {
 			throw std::runtime_error("failed to mmap capture buffer " + std::to_string(i));
       }
-		buffers_[i].size = buffer.m.planes[0].length;
 		
-      if (!applyDeviceParam(VIDIOC_QBUF, &buffer)) {
-			throw std::runtime_error("failed to queue capture buffer " + std::to_string(i));
-      }
+      v4l2Cmd(VIDIOC_QBUF, &buffer, "failed to queue capture buffer " + std::to_string(i));
 	}
 
 	v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	if (!applyDeviceParam(VIDIOC_STREAMON, &type)) {
-		throw std::runtime_error("failed to start output streaming");
-   }
+	v4l2Cmd(VIDIOC_STREAMON, &type, "failed to start output streaming");
    
 	type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	if (!applyDeviceParam(VIDIOC_STREAMON, &type)) {
-		throw std::runtime_error("failed to start capture streaming");
-   }
+	v4l2Cmd(VIDIOC_STREAMON, &type, "failed to start capture streaming");
    
-	log.info("Codec streaming started");
+	log.info("encoder started");
 
-	output_thread_ = std::thread(&H264Encoder::outputThread, this);
-	poll_thread_   = std::thread(&H264Encoder::pollThread,   this);
+	outputThread = std::thread(&H264Encoder::outputThreadTask, this);
+	pollThread   = std::thread(&H264Encoder::pollThreadTask,   this);
 }
 
 H264Encoder::~H264Encoder() {
-	abortPoll_ = true;
-	poll_thread_.join();
-	abortOutput_ = true;
-	output_thread_.join();
+	quitPollThread   = true;
+	quitOutputThread = true;
+	pollThread.join();
+	outputThread.join();
 
 	v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-   
-	if (!applyDeviceParam(VIDIOC_STREAMOFF, &type)) {
-		log.error("Failed to stop output streaming");
-   }
-   
+	v4l2Cmd(VIDIOC_STREAMOFF, &type, "failed to stop output streaming");
+      
 	type = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-   
-	if (!applyDeviceParam(VIDIOC_STREAMOFF, &type)) {
-		log.error("Failed to stop capture streaming");
-   }
-   
-	v4l2_requestbuffers reqbufs = {};
-	reqbufs.count               = 0;
-	reqbufs.type                = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
-	reqbufs.memory              = V4L2_MEMORY_DMABUF;
-   
-	if (!applyDeviceParam(VIDIOC_REQBUFS, &reqbufs)) {
-		log.error("Request to free output buffers failed");
-   }
-   
-	for (int i = 0; i < num_capture_buffers_; i++) {
-		if (munmap(buffers_[i].mem, buffers_[i].size) < 0) {
-			log.error("Failed to unmap buffer");
-      }
-   }
-	reqbufs        = {};
-	reqbufs.count  = 0;
-	reqbufs.type   = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-	reqbufs.memory = V4L2_MEMORY_MMAP;
-   
-	if (!applyDeviceParam(VIDIOC_REQBUFS, &reqbufs)) {
-		log.error("Request to free capture buffers failed");
-   }
-   
+	v4l2Cmd(VIDIOC_STREAMOFF, &type, "failed to stop capture streaming");
+      
 	close(encoderFileDescriptor);
-	log.info("H264Encoder closed");
+	log.info("encoder closed");
 }
 
 void H264Encoder::encode(FrameBuffer *frameBuffer, int64_t timestamp_us) {
@@ -268,25 +217,30 @@ void H264Encoder::encode(FrameBuffer *frameBuffer, int64_t timestamp_us) {
 	buf.m.planes[0].bytesused  = planeLength;                       // The number of bytes occupied by data in the plane (its payload)
 	buf.m.planes[0].length     = planeSize;                         // Size in bytes of the plane (not its payload)
    
-   // VIDIOC_QBUF = enqueue a buffer in the driver’s incoming queue
-	if (!applyDeviceParam(VIDIOC_QBUF, &buf)) {
-		throw std::runtime_error("failed to queue input to codec");
-   }
+   v4l2Cmd(VIDIOC_QBUF, &buf, "failed to queue input to codec");
 }
 
-void H264Encoder::pollThread() {
+/**
+ * This task waits for the completion of encoding a NAL. As soon as a NAL
+ * is available it moves one input buffer back to the queue of available 
+ * buffers and dequeues the output buffer (containing the NAL).
+ * The NAL gets put into another queue processed by the outputThreadTask.
+ * This decouples the consumption of the JPEG from moving around buffers.
+ */
+void H264Encoder::pollThreadTask() {
 	while (true) {
       pollfd p = { encoderFileDescriptor, POLLIN, 0 };
-		// wait for data to read (POLLIN) on one file description and timeout
+		// Wait for data to read (POLLIN) from the encoder device and timeout
       // after 200 ms.
-      // returnValue > 0  number of elements in the pollfds whose revents 
-      //                  fields have been set to a nonzero value
-      //             = 0  time out
+      //
+      // returnValue >  0 number of elements in the pollfds whose revents 
+      //                  fields have been set to POLLIN
+      //             =  0 time out
       //             = -1 error
 		int returnValue = poll(&p, 1, 200);
 		{
 			std::lock_guard<std::mutex> lock(inputBufferAvailableMutex);
-			if (abortPoll_ && availableInputBuffers.size() == NUM_OUTPUT_BUFFERS) {
+			if (quitPollThread && availableInputBuffers.size() == H264_INPUT_BUFFER_COUNT) {
 				break;
          }
 		}
@@ -296,7 +250,7 @@ void H264Encoder::pollThread() {
          }
 			throw std::runtime_error("unexpected errno " + std::to_string(errno) + " from poll");
 		}
-		if (p.revents & POLLIN) { // data ready to read
+		if (p.revents & POLLIN) {  // H.264 NAL ready to provide to consumer/callback
 			v4l2_buffer buf = {};
 			v4l2_plane planes[VIDEO_MAX_PLANES] = {};
          
@@ -305,8 +259,8 @@ void H264Encoder::pollThread() {
 			buf.length   = 1;
 			buf.m.planes = planes;
          
-         // VIDIOC_DQBUF = dequeue a buffer from the driver’s outgoing queue
-			if (applyDeviceParam(VIDIOC_DQBUF, &buf)) {
+         v4l2Cmd(VIDIOC_DQBUF, &buf, "failed to dequeue input buffer"); 
+         {
             std::lock_guard<std::mutex> lock(inputBufferAvailableMutex);
             availableInputBuffers.push(buf.index);
 			}
@@ -314,53 +268,52 @@ void H264Encoder::pollThread() {
 			buf = {};
 			memset(planes, 0, sizeof(planes));
          
-			buf.type       = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
-			buf.memory     = V4L2_MEMORY_MMAP;
-			buf.length     = 1;
-			buf.m.planes   = planes;
+			buf.type     = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
+			buf.memory   = V4L2_MEMORY_MMAP;
+			buf.length   = 1;
+			buf.m.planes = planes;
          
-			if (applyDeviceParam(VIDIOC_DQBUF, &buf)) {
-				// We push this encoded buffer to another thread so that our
-				// application can take its time with the data without blocking the
-				// encode process.
-				int64_t timestamp_us = (buf.timestamp.tv_sec * (int64_t)1000000) + buf.timestamp.tv_usec;
-				OutputItem item = { buffers_[buf.index].mem,
-									buf.m.planes[0].bytesused,
-									buf.m.planes[0].length,
-									buf.index,
-									!!(buf.flags & V4L2_BUF_FLAG_KEYFRAME),
-									timestamp_us };
-				std::lock_guard<std::mutex> lock(output_mutex_);
-				output_queue_.push(item);
-				output_cond_var_.notify_one();
-			}
+			v4l2Cmd(VIDIOC_DQBUF, &buf, "failed to dequeue output buffer");
+         int64_t timestamp_us = (buf.timestamp.tv_sec * (int64_t)1000000) + buf.timestamp.tv_usec;
+         H264Nal nal = { outputBufferData[buf.index],
+                        buf.m.planes[0].bytesused,
+                        buf.m.planes[0].length,
+                        buf.index,
+                        !!(buf.flags & V4L2_BUF_FLAG_KEYFRAME),
+                        timestamp_us };
+         std::lock_guard<std::mutex> lock(nalsReadyMutex);
+         nalsReadyToConsume.push(nal);
+         nalsReadyCondition.notify_one();
 		}
 	}
 }
 
-void H264Encoder::outputThread() {
-	OutputItem item;
+/**
+ * This task waits for NALs enqueued by pollThreadTask and provides
+ * them to the consumer/callback. After consumption the output buffer
+ * gets enqueue again.
+ */
+void H264Encoder::outputThreadTask() {
+	H264Nal nal;
 	while (true) {
 		{
-			std::unique_lock<std::mutex> lock(output_mutex_);
+			std::unique_lock<std::mutex> lock(nalsReadyMutex);
 			while (true) {
-				// Must check the abort first, to allow items in the output
-				// queue to have a callback.
-				if (abortOutput_ && output_queue_.empty()) {
+				if (quitOutputThread && nalsReadyToConsume.empty()) {
 					return;
             }
-				if (!output_queue_.empty()) {
-					item = output_queue_.front();
-					output_queue_.pop();
+				if (!nalsReadyToConsume.empty()) {
+					nal = nalsReadyToConsume.front();
+					nalsReadyToConsume.pop();
 					break;
 				} else {
-					output_cond_var_.wait_for(lock, 200ms);
+					nalsReadyCondition.wait_for(lock, 200ms);
             }
 			}
 		}
 
       if (outputReadyCallback) {
-         outputReadyCallback(item.mem, item.bytes_used, item.timestamp_us, item.keyframe);
+         outputReadyCallback(nal.mem, nal.bytes_used, nal.timestamp_us, nal.keyframe);
 		}
       
       v4l2_buffer buf = {};
@@ -368,14 +321,12 @@ void H264Encoder::outputThread() {
       
 		buf.type                   = V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE;
 		buf.memory                 = V4L2_MEMORY_MMAP;
-		buf.index                  = item.index;
+		buf.index                  = nal.index;
 		buf.length                 = 1;
 		buf.m.planes               = planes;
 		buf.m.planes[0].bytesused  = 0;
-		buf.m.planes[0].length     = item.length;
+		buf.m.planes[0].length     = nal.length;
       
-		if (!applyDeviceParam(VIDIOC_QBUF, &buf)) {
-			throw std::runtime_error("failed to re-queue encoded buffer");
-      }
+		v4l2Cmd(VIDIOC_QBUF, &buf, "failed to re-queue encoded buffer");
 	}
 }

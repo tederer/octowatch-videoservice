@@ -12,9 +12,13 @@
 
 #include "Logging.h"
 
-#define NUM_OUTPUT_BUFFERS    6
-#define NUM_CAPTURE_BUFFERS   12
+#define H264_INPUT_BUFFER_COUNT    6
+#define H264_OUTPUT_BUFFER_COUNT   12
 
+/**
+ * ATTENTION: The data pointer is only valid as long as you are
+ *            in the callback!
+ */
 typedef std::function<void(void    *data,       // pointer to the data of the NAL
                            size_t  bytesCount,  // size of the NAL in bytes
                            int64_t timestamp,   
@@ -28,9 +32,6 @@ class H264Encoder {
 
       /**
        * The callback gets called as soon as a NAL is ready for sending.
-       *
-       * ATTENTION: The data pointer is only valid as long as you are
-       *            in the callback!
        */
       void setOutputReadyCallback(OutputReadyCallback callback);
 
@@ -40,12 +41,7 @@ class H264Encoder {
       void encode(libcamera::FrameBuffer *frameBuffer, int64_t timestamp_us);
 
    private:
-      struct BufferDescription {
-         void   *mem;
-         size_t size;
-      };
-      
-      struct OutputItem {
+      struct H264Nal {
          void         *mem;
          size_t       bytes_used;
          size_t       length;
@@ -54,26 +50,26 @@ class H264Encoder {
          int64_t      timestamp_us;
       };
       
-      bool applyDeviceParam(unsigned long ctl, void *arg);
-      int get_v4l2_colorspace(std::optional<libcamera::ColorSpace> const &cs);
+      void v4l2Cmd(unsigned long ctl, void *arg, std::string errorMessage);
+      int get_v4l2_colorspace(std::optional<libcamera::ColorSpace> const &libcameraColorSpace);
       
-      void pollThread();
-      void outputThread();
+      void pollThreadTask();
+      void outputThreadTask();
 
       logging::Logger         log;
       OutputReadyCallback     outputReadyCallback;
-      bool                    abortPoll_;
-      bool                    abortOutput_;
+      bool                    quitPollThread;
+      bool                    quitOutputThread;
+      bool                    v4l2CommandError;
       int                     encoderFileDescriptor;
-      BufferDescription       buffers_[NUM_CAPTURE_BUFFERS];
-      int                     num_capture_buffers_;
-      std::thread             poll_thread_;
+      void*                   outputBufferData[H264_OUTPUT_BUFFER_COUNT];
       std::mutex              inputBufferAvailableMutex;
       std::queue<int>         availableInputBuffers;
-      std::queue<OutputItem>  output_queue_;
-      std::mutex              output_mutex_;
-      std::condition_variable output_cond_var_;
-      std::thread             output_thread_;
+      std::queue<H264Nal>     nalsReadyToConsume;
+      std::mutex              nalsReadyMutex;
+      std::condition_variable nalsReadyCondition;
+      std::thread             pollThread;
+      std::thread             outputThread;
 };
 
 #endif

@@ -4,9 +4,10 @@
 #include <cstring>
 #include <regex>
 #include <string>
-#include <sys/mman.h>
 #include <thread>
 
+#include "CpuJpegEncoder.h"
+#include "HardwareJpegEncoder.h"
 #include "MultipartJpegHttpStream.h"
 
 #define PORT 8887
@@ -51,8 +52,16 @@ MultipartJpegHttpStream::MultipartJpegHttpStream(StreamConfiguration const &stre
          log.warning("ignoring quality requested via env var because it's not an integer.");
       }
    }
-   log.info("jpeg quality =", quality);
-   jpegEncoder.reset(new JpegEncoder(streamConfig, quality));
+   
+   char* jpegEncoderEnvVar = std::getenv("OCTOWATCH_JPEG_ENCODER");
+   if (jpegEncoderEnvVar && (strcmp(jpegEncoderEnvVar, "CPU") == 0)) {
+      jpegEncoder.reset(new CpuJpegEncoder(streamConfig, quality));
+   } else {
+      jpegEncoder.reset(new HardwareJpegEncoder(streamConfig, quality));
+   }
+   
+   jpegEncoder->setOutputReadyCallback(std::bind(&MultipartJpegHttpStream::onJpegAvailable, this, 
+      std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
 }
 
 MultipartJpegHttpStream::~MultipartJpegHttpStream() {
@@ -68,27 +77,13 @@ void MultipartJpegHttpStream::start() {
    tcpServer->start();
 }
 
-void MultipartJpegHttpStream::send(libcamera::FrameBuffer *frameBuffer) {
+void MultipartJpegHttpStream::send(libcamera::FrameBuffer *frameBuffer, int64_t timestamp_us) {
             
-   auto firstPlane          = frameBuffer->planes()[0];
-   void* frameBufferContent = mmap(nullptr, firstPlane.length, PROT_READ, MAP_SHARED,
-                                   firstPlane.fd.get(), firstPlane.offset);
-   
-   if (frameBufferContent != MAP_FAILED) {
-      auto start = std::chrono::steady_clock::now();
-      JpegEncoder::JpegImage image = jpegEncoder->encode((uint8_t*)frameBufferContent + firstPlane.offset, firstPlane.length);
-      auto end = std::chrono::steady_clock::now();
-      std::chrono::duration<double> diff = end - start;
-      log.debug("JPEG encoding duration =", (int)(diff.count() * 1000), "ms"); 
-      if (image.size > 0 && image.data != nullptr) {
-         sendJpeg(image.data, image.size);
-      }
-      if (munmap(frameBufferContent, firstPlane.length) != 0) {
-         log.error("failed to unmap DMA buffer");
-      }  
-   } else {
-      log.error("failed to map DMA buffer: error", errno);
-   }
+   jpegEncoder->encode(frameBuffer, timestamp_us);
+}
+
+void MultipartJpegHttpStream::onJpegAvailable(void *data, size_t bytesCount, int64_t timestamp) {
+   sendJpeg(data, bytesCount);
 }
 
 void MultipartJpegHttpStream::sendJpeg(void *data, size_t size) {
@@ -100,7 +95,7 @@ void MultipartJpegHttpStream::sendJpeg(void *data, size_t size) {
       const std::lock_guard<std::mutex> lock(connectionMutex);
       if (connection != nullptr) {
          connection->asyncSend(messageToSend.str()); 
-         connection->asyncSendAndFree(data, size);   
+         connection->asyncSend(data, size);   
          connection->asyncSend(std::string(CRLF).append(CRLF));
          
          while (!connection->outputBufferEmpty()) {

@@ -28,14 +28,11 @@ using namespace std::chrono_literals;
 class Impl {
    public:
       Impl() : log("Impl"),
-               executor(std::bind(&Impl::onTaskFinished, this, std::placeholders::_1)),
                camera(),
                cameraControl(camera),
                mpjpegConnected(false),
                h264Connected(false),
-               systemTemperature(),
-               nextTaskId(0),
-               currentTaskId(-1) {
+               systemTemperature() {
                
          startVideoStreams();
          cameraControl.start();
@@ -90,36 +87,17 @@ class Impl {
          updateCameraState();
       }
       
-      void onTaskFinished(int taskId) {
-         log.debug("finished task:", taskId);
-         currentTaskId = -1;
-      }
-      
-      int getNextTaskId() {
-         int result = nextTaskId;
-         nextTaskId = (nextTaskId + 1) % 1000;
-         return result;
-      }
-      
       void onNewFrame(FrameBuffer *highResolutionFrameBuffer, 
                       FrameBuffer *lowResolutionFrameBuffer, int64_t timestamp) {
 
          log.debug("new frame with timestamp ", timestamp);
-         if (currentTaskId >= 0) {
-            log.warning("ignoring frame because previous frame is still in progress.");
-            return;
-         }
-         
-         if (mpjpegConnected) {
-            currentTaskId = getNextTaskId();
-            log.debug("enqueuing task", currentTaskId, "for execution in separate thread");
-            executor.execute([this, lowResolutionFrameBuffer](){
-               mpjegStream->send(lowResolutionFrameBuffer);
-            }, currentTaskId);
-         }
                          
          if (h264Connected) {
             h264Stream->send(highResolutionFrameBuffer, timestamp);
+         }
+         
+         if (mpjpegConnected) {
+            mpjegStream->send(lowResolutionFrameBuffer, timestamp);
          }
       }
 
@@ -134,7 +112,6 @@ class Impl {
       
    private:
       Logger                                   log;
-      SingleThreadedExecutor                   executor;
       Camera                                   camera;
       CameraControl                            cameraControl;
       bool                                     mpjpegConnected;
@@ -142,8 +119,6 @@ class Impl {
       std::unique_ptr<H264Stream>              h264Stream;
       std::unique_ptr<MultipartJpegHttpStream> mpjegStream;
       SystemTemperature                        systemTemperature;
-      int                                      nextTaskId;
-      int                                      currentTaskId;
 };
 
 int main() {

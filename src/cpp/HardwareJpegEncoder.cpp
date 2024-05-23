@@ -79,18 +79,20 @@ void HardwareJpegEncoder::setJpegQuality(int quality) {
 }
    
 void HardwareJpegEncoder::configureInputFormat(StreamConfiguration const &streamConfig) {
-   struct v4l2_format inFormat  = {};
+   struct v4l2_format inFormat       = {};
+   int                v4l2Colorspace = getV4l2Colorspace(streamConfig.colorSpace);
    
    log.info("streamConfig( width =", streamConfig.size.width, 
-            ", height =", streamConfig.size.height, ", stride =", streamConfig.stride, ")");
+            ", height =", streamConfig.size.height, ", stride =", streamConfig.stride, ",v4l2Colorspace =", v4l2Colorspace, ")");
    
+
    inFormat.type                                 = V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE;
 	inFormat.fmt.pix_mp.width                     = streamConfig.size.width;
 	inFormat.fmt.pix_mp.height                    = streamConfig.size.height;
 	inFormat.fmt.pix_mp.pixelformat               = V4L2_PIX_FMT_YUV420;
 	inFormat.fmt.pix_mp.plane_fmt[0].bytesperline = streamConfig.stride;
 	inFormat.fmt.pix_mp.field                     = V4L2_FIELD_NONE;
-   inFormat.fmt.pix_mp.colorspace                = getV4l2Colorspace(streamConfig.colorSpace);
+   inFormat.fmt.pix_mp.colorspace                = v4l2Colorspace;
    inFormat.fmt.pix_mp.num_planes                = 1;
 
    v4l2Cmd(VIDIOC_S_FMT, &inFormat, "failed to set input format");
@@ -137,6 +139,7 @@ void HardwareJpegEncoder::createInputBuffers() {
    log.info("\t* count     =", inputBufferRequest.count);
       
    for (unsigned int index = 0; index < inputBufferRequest.count; index++) {
+		std::lock_guard<std::mutex> lock(availableInputBuffersMutex);
 		availableInputBuffers.push(index);
    }
    
@@ -287,7 +290,7 @@ void HardwareJpegEncoder::encode(FrameBuffer *frameBuffer, int64_t timestamp_us)
    
    int indexOfFreeBuffer;
 	{
-		std::lock_guard<std::mutex> lock(inputBufferAvailableMutex);
+		std::lock_guard<std::mutex> lock(availableInputBuffersMutex);
 		if (availableInputBuffers.empty()) {
 			log.warning("no input buffer available -> ignoring frame");
          return;
@@ -336,7 +339,7 @@ void HardwareJpegEncoder::pollThreadTask() {
       //             = -1 error
 		int returnValue = poll(&driverEvent, 1, 200);
 		{
-			std::lock_guard<std::mutex> lock(inputBufferAvailableMutex);
+			std::lock_guard<std::mutex> lock(availableInputBuffersMutex);
 			if (quitPollThread && availableInputBuffers.size() == HARDWARE_JPEG_ENCODER_BUFFER_COUNT) {
 				break;
          }
@@ -360,9 +363,9 @@ void HardwareJpegEncoder::pollThreadTask() {
          
          v4l2Cmd(VIDIOC_DQBUF, &buf, "failed to dequeue input buffer");
          {
-            std::lock_guard<std::mutex> lock(inputBufferAvailableMutex);
-            availableInputBuffers.push(buf.index);
-			}
+            std::lock_guard<std::mutex> lock(inputBuffersReadyToReuseMutex);
+            inputBuffersReadyToReuse.push(buf.index);
+         }
 
 			buf = {};
 			memset(planes, 0, sizeof(planes));
@@ -428,5 +431,19 @@ void HardwareJpegEncoder::outputThreadTask() {
 		buf.m.planes[0].length     = jpegImage.length;
       
 		v4l2Cmd(VIDIOC_QBUF, &buf, "failed to enqueue output buffer");
+      
+      int inputBufferIndex = -1;
+      std::lock_guard<std::mutex> lock(inputBuffersReadyToReuseMutex);
+      {
+         if (!inputBuffersReadyToReuse.empty()) {
+            inputBufferIndex = inputBuffersReadyToReuse.front();
+            inputBuffersReadyToReuse.pop();
+         }    
+      }
+      
+      if (inputBufferIndex >= 0) {
+         std::lock_guard<std::mutex> lock(availableInputBuffersMutex);
+         availableInputBuffers.push(inputBufferIndex);   
+      }
 	}
 }

@@ -65,10 +65,12 @@ class HardwareJpegEncoder : public JpegEncoder {
       JpegOutputReadyCallback outputReadyCallback;
       int                     encoderFileDescriptor;
       void*                   outputBufferData[HARDWARE_JPEG_ENCODER_BUFFER_COUNT];
-      std::mutex              inputBufferAvailableMutex;
       std::queue<int>         availableInputBuffers;
+      std::queue<int>         inputBuffersReadyToReuse;
       std::queue<JpegImage>   jpegsReadyToConsume;
+      std::mutex              availableInputBuffersMutex;
       std::mutex              jpegsReadyMutex;
+      std::mutex              inputBuffersReadyToReuseMutex;
       std::condition_variable jpegsReadyCondition;
       std::thread             pollThread;
       std::thread             outputThread;

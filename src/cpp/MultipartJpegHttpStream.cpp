@@ -97,10 +97,6 @@ void MultipartJpegHttpStream::sendJpeg(void *data, size_t size) {
          connection->asyncSend(messageToSend.str()); 
          connection->asyncSend(data, size);   
          connection->asyncSend(std::string(CRLF).append(CRLF));
-         
-         while (!connection->outputBufferEmpty()) {
-            std::this_thread::sleep_for(5ms); // TODO are we losing time here?
-         }
       }
    }
 }

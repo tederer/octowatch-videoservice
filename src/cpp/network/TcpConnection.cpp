@@ -1,6 +1,7 @@
-
+#include <chrono>
 #include <cstdlib>
 #include <cstring>
+#include <thread>
 
 #include "TcpServer.h"
 
@@ -9,9 +10,11 @@ using network::TcpConnection;
 using network::TcpServer;
 using logging::Logger;
 
+using namespace std::chrono_literals;
+
 std::unique_ptr<TcpConnection> TcpConnection::create(
-   boost::asio::io_context& ioContext, Logger& log) {
-   return std::unique_ptr<TcpConnection>(new TcpConnection(ioContext, log));
+   boost::asio::io_context& ioContext, const std::string& name) {
+   return std::unique_ptr<TcpConnection>(new TcpConnection(ioContext, name));
 }
 
 boost::asio::ip::tcp::socket& TcpConnection::getSocket() {
@@ -25,22 +28,26 @@ void TcpConnection::start( std::function<void()> connectionClosedCallback,
    readNextLine();
 }
 
-TcpConnection::TcpConnection( boost::asio::io_context& ioContext, Logger& log) 
-   :  log(log), 
+TcpConnection::TcpConnection( boost::asio::io_context& ioContext, const std::string& name) 
+   :  log((std::string("TcpConnection-").append(name)).c_str()), 
+      ioContext(ioContext),
       pendingOutputByteCount(0), 
       aborted(false),
+      closed(false),
       socket(ioContext),
       readBuffer(),      
       writeBuffer(boost::asio::const_buffer())
       {}
 
 TcpConnection::~TcpConnection() {
-   if (!aborted && socket.is_open()) {
-      socket.close();
-   }
+   close();
 }
 
 void TcpConnection::sendQueuedData() {
+   if (closed) {
+      return;
+   }
+   
    size_t byteCountToSend = 0;
    {
       const std::lock_guard<std::mutex> lock(mutex);
@@ -77,6 +84,10 @@ void TcpConnection::send(boost::asio::const_buffer& buffer) {
 }
 
 void TcpConnection::asyncSend(const std::string& message) {
+   if (closed) {
+      return;
+   }
+   
    std::size_t charCount   = message.size();
    std::size_t sizeInBytes = charCount * sizeof(char);
    void* messageCopy       = std::malloc(sizeInBytes);
@@ -87,6 +98,10 @@ void TcpConnection::asyncSend(const std::string& message) {
 }   
 
 void TcpConnection::asyncSend(void *mem, size_t size) {
+   if (closed) {
+      return;
+   }
+   
    void* dataCopy = std::malloc(size);
    std::memcpy(dataCopy, mem, size);
    
@@ -95,6 +110,10 @@ void TcpConnection::asyncSend(void *mem, size_t size) {
 }
 
 void TcpConnection::asyncSendAndFree(void *mem, size_t size) {
+   if (closed) {
+      return;
+   }
+   
    auto buffer = boost::asio::const_buffer(std::move(boost::asio::buffer(mem, size)));
    send(buffer);
 }
@@ -105,7 +124,30 @@ bool TcpConnection::outputBufferEmpty() {
 }
 
 void TcpConnection::close() {
-   socket.close();
+   if (closed) {
+      return;
+   }
+   
+   closed = true;
+   if (socket.is_open()) {
+      log.info("closing socket");
+      socket.close();
+   }
+   if (!ioContext.stopped()) {
+      log.info("stopping ioContext");
+      ioContext.stop();
+      log.info("waiting for boost::asio::io_context to stop");
+      int repetitions = 30;
+      while((repetitions > 0) && !ioContext.stopped()) {
+         std::this_thread::sleep_for(100ms);
+         repetitions--;
+      }
+      if (ioContext.stopped()) {
+         log.info("boost::asio::io_context stopped");
+      } else {
+         log.error("waiting for termination of boost::asio::io_context timed out");
+      }
+   }
    connectionClosedCallback();
 }
 
@@ -114,6 +156,7 @@ void TcpConnection::onWriteComplete(const boost::system::error_code& error,
    if (error) {
       log.error("failed to write:", error.message());
       close();
+      return;
    }
    
    bool allBytesSent = false;

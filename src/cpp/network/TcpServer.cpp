@@ -15,6 +15,7 @@ using namespace std::chrono_literals;
 
 TcpServer::TcpServer(unsigned int port, const std::string& name, TcpServer::Listener& tcpServerListener)
  : log((std::string("TcpServer-").append(name)).c_str()),
+   name(name),
    port(port), 
    stopped(false),
    listener(tcpServerListener) {}
@@ -37,7 +38,7 @@ void TcpServer::start() {
    
    thread = std::unique_ptr<std::thread>(new std::thread([this](){
       while(!stopped) {
-         std::unique_ptr<TcpConnection> newConnection = TcpConnection::create(*ioContext, log);
+         std::unique_ptr<TcpConnection> newConnection = TcpConnection::create(*ioContext, name);
          auto callback = [this, &newConnection](const boost::system::error_code& error){
             handle_accept(std::move(newConnection), error);
          };

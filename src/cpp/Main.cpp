@@ -78,11 +78,13 @@ class Impl {
       }
       
       void onMpjpegConnected(bool connected) {
+         log.info("MJPEG-stream state =", connected ? "connected" : "disconnected");
          mpjpegConnected = connected;
          updateCameraState();
       }
       
       void onH264Connected(bool connected) {
+         log.info("H.264-stream state =", connected ? "connected" : "disconnected");
          h264Connected = connected;
          updateCameraState();
       }

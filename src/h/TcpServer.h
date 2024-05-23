@@ -15,7 +15,7 @@ namespace network {
    class TcpConnection {
       public:
          static std::unique_ptr<TcpConnection> create(boost::asio::io_context& io_context, 
-                                                      logging::Logger& log);
+                                                      const std::string& name);
 
          ~TcpConnection();
          
@@ -45,7 +45,7 @@ namespace network {
          bool outputBufferEmpty();
          
       private:
-         TcpConnection( boost::asio::io_context& io_context, logging::Logger& logger);
+         TcpConnection( boost::asio::io_context& io_context, const std::string& name);
 
          void readNextLine();
          
@@ -59,9 +59,11 @@ namespace network {
          
          void onReadLineComplete(const boost::system::error_code& error, size_t bytes_transferred);
 
-         logging::Logger&                       log;
+         logging::Logger                        log;
+         boost::asio::io_context&               ioContext;
          size_t                                 pendingOutputByteCount;
          bool                                   aborted;
+         bool                                   closed;
          boost::asio::ip::tcp::socket           socket;
          boost::asio::streambuf                 readBuffer;
          boost::asio::const_buffer              writeBuffer;
@@ -113,6 +115,7 @@ namespace network {
                               const boost::system::error_code& error);
 
          logging::Logger                                 log;
+         std::string                                     name;
          unsigned int                                    port;
          bool                                            stopped;
          Listener&                                       listener;

@@ -1,4 +1,24 @@
-# octowatch-videoservice
+# Video Service
+This repository contains the source code of the Video service, which is part of the [Underwater Camera Project](https://underwater-camera-project.github.io).
+
+## Features
+
+The service provides the following features:
+
+* H.264 video stream (1920 x 1080 pixel)
+* MPJPEG video stream (800 x 600 pixel)
+* Remote Control Interface for changing the settings of the camera module
+
+## Installation
+
+The following steps describe how to install the monitoring service on your Raspberry Pi.
+
+1.  Clone this repository
+2.  Execute `compile.sh`
+
+## Starting the service
+
+Execute `start.sh`.
 
 video service of the OctoWatch underwater camera
 

@@ -2,7 +2,7 @@ project('video-service', 'c', 'cpp',
   version : '0.1',
   default_options : ['werror=true', 'warning_level=3', 'cpp_std=c++17', 'c_std=c11', 'buildtype=release'])
 
-headersDir        = include_directories(['src/h'])
+headersDir        = include_directories(['src/h', '../boost_1_82_0'])
 
 libcamera_dep     = dependency('libcamera', required : true)
 libjpeg_dep       = dependency('libjpeg',   required : true)

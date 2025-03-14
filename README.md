@@ -50,11 +50,9 @@ cd octowatch-videoservice
 ./compile.sh
 ```
 
-## Starting the service
+## Starting the Service
 
-Execute `start.sh`, which is located in the root folder of this project.
-
-video service of the OctoWatch underwater camera
+In order to start the service, run `start.sh` which is located in the root folder of this project. The following table lists all the environment variables available to customise the behaviour of the service.
 
 ## Environment variables
 

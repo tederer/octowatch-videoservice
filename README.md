@@ -54,13 +54,97 @@ cd octowatch-videoservice
 
 In order to start the service, run `start.sh` which is located in the root folder of this project. The following table lists all the environment variables available to customise the behaviour of the service.
 
-## Environment variables
+## Environment Variables
 
 |variable              |range                               |default        |description                                  |
 |----------------------|------------------------------------|---------------|---------------------------------------------|
 |OCTOWATCH_LOG_LEVEL   | [DEBUG, INFO, WARNING, ERROR, OFF] | INFO          | log level                                   |
 |OCTOWATCH_JPEG_QUALITY| integer in the range [0, 100]      | 95            | JPEG image quality                          |
 |OCTOWATCH_JPEG_ENCODER| [CPU, emptyString]                 | emptyString   | whether to use CPU or hardware JPEG encoder   |
+
+## Remote Control Interface
+
+The remote control interface was implemented as a TCP connection. For bidirectional communication, the messages are encoded in JavaScript Object Notation (JSON) format. This is done because the web server is implemented in JavaScript and therefore decoding/parsing of the messages is only necessary in the video service. This simplifies implementation and reduces the susceptibility to errors. The structure of the messages used is shown in the following listing:
+
+```javascript
+{
+   "type": string,
+   "content": object
+}
+```
+
+Each message consists of a JSON object with two properties. The "type" specifies the message type and "content" contains the data object that belongs to the message. The following figure shows the communication between the Video Service and a web server as a sequence diagram.
+
+![Communication between the Video Service and a Web Server](images/remote_control_interface_sequence_diagram.png)
+
+The video service informs the web server about the capabilities of the camera module and their current values as soon as the TCP connection has been established. The following shows an abbreviated output of a "capabilities" message. It describes which settings of the camera module can be changed. For each capability, the expected data type, the range in which the value must lie and the default value to be used are specified.
+
+```javascript
+{
+   "type": "capabilities",
+   "content": {
+      "Brightness": {
+         "type": "float",
+         "minimum": -1,
+         "maximum": 1,
+         "default": 0
+      },
+      "Contrast": {
+         "type": "float",
+         "minimum": 0,
+         "maximum": 32,
+         "default": 1
+      },
+...
+   }
+}
+```
+
+The "currentValues" message is always sent by the video service when the values of the camera properties change. Such a message is shown in the following listing. The capabilities contained in this message and the "capabilities" message depend on the camera module used.
+
+```javascript
+{
+   "type": " currentValues ",
+   "content": {
+      "AeConstraintMode": 0,
+      "AeExposureMode": 0,
+      "AeFlickerMode": 0,
+      "AeMeteringMode": 0,
+      "AwbMode": 0,
+      "Brightness": 0,
+      "Contrast": 1,
+      "ExposureValue": 0,
+      "HdrMode": 0,
+      "NoiseReductionMode": 0,
+      "Saturation": 1,
+      "Sharpness": 1
+   }
+}
+```
+
+If the web server receives a request to change the value of a camera module capability, it sends a "setControl" message to the service. This contains information about which property is to be changed and which new value is to be used. An example of such a message that changes the image sharpness is shown in the following listing.
+
+```javascript
+{
+   "type": "setControl",
+   "content": {
+      "control": "Sharpness",
+      "value": 6
+   }
+}
+```
+
+An error message is sent by the Video Service if an invalid command is received or a problem occurs during processing. The error message is shown in the following listing.
+
+```javascript
+{
+   "type": "error",
+   "content": {
+      "message": "unknown command :"
+   }
+}
+```
+
 
 ## References
 

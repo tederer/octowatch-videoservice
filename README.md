@@ -64,7 +64,7 @@ In order to start the service, run `start.sh` which is located in the root folde
 
 ## Remote Control Interface
 
-The remote control interface was implemented as a TCP connection. For bidirectional communication, the messages are encoded in JavaScript Object Notation (JSON) format. This is done because the web server of the [Underwater Camera Project](https://underwater-camera-project.github.io) is implemented in JavaScript and therefore decoding/parsing of the messages is only necessary in the Video Service. The structure of the messages used is shown in the following listing:
+The remote control interface was implemented as a TCP connection. For bidirectional communication, the messages are encoded in JavaScript Object Notation (JSON) format. This is done because the Web Server of the [Underwater Camera Project](https://underwater-camera-project.github.io) is implemented in JavaScript and therefore decoding/parsing of the messages is only necessary in the Video Service. The structure of the messages used is shown in the following listing:
 
 ```javascript
 {
@@ -73,11 +73,11 @@ The remote control interface was implemented as a TCP connection. For bidirectio
 }
 ```
 
-Each message consists of a JSON object with two properties. The "type" specifies the message type and "content" contains the data object that belongs to the message. The following figure shows the communication between the Video Service and a web server as a sequence diagram.
+Each message consists of a JSON object with two properties. The "type" specifies the message type and "content" contains the data object that belongs to the message. The following figure shows the communication between the Video Service and a Web Server as a sequence diagram.
 
 ![Communication between the Video Service and a Web Server](images/remote_control_interface_sequence_diagram.png)
 
-The Video Service informs the web server about the capabilities of the camera module and their current values as soon as the TCP connection has been established. The following shows an abbreviated output of a "capabilities" message. It describes which settings of the camera module can be changed. For each capability, the expected data type, the range in which the value must lie and the default value to be used are specified.
+The Video Service informs the Web Server about the capabilities of the camera module and their current values as soon as the TCP connection has been established. The following listing shows an abbreviated output of a "capabilities" message. It describes which settings of the camera module can be changed. For each capability, the expected data type, the range in which the value must lie and the default value to be used are specified.
 
 ```javascript
 {
@@ -122,7 +122,7 @@ The "currentValues" message is always sent by the Video Service when the values 
 }
 ```
 
-If the web server receives a request to change the value of a camera module capability, it sends a "setControl" message to the service. This contains information about which property is to be changed and which new value is to be used. An example of such a message that changes the image sharpness is shown in the following listing.
+If the Web Server receives a request to change the value of a camera module capability, it sends a "setControl" message to the service. This contains information about which property is to be changed and which new value is to be used. An example of such a message that changes the image sharpness is shown in the following listing.
 
 ```javascript
 {

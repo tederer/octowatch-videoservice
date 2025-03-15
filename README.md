@@ -1,5 +1,5 @@
 # Video Service
-This repository contains the source code of the Video service, which is part of the [Underwater Camera Project](https://underwater-camera-project.github.io).
+This repository contains the source code of the Video Service, which is part of the [Underwater Camera Project](https://underwater-camera-project.github.io).
 
 ## Features
 
@@ -11,7 +11,7 @@ The service provides the following features:
 
 ## Installation
 
-The installation of the video service consists of two parts: firstly, all the necessary dependencies must be made available, and then the service can be compiled.
+The installation of the Video Service consists of two parts: firstly, all the necessary dependencies must be made available, and then the service can be compiled.
 
 ### Installing the Dependencies
 
@@ -41,7 +41,7 @@ cd boost_1_82_0
 
 ### Compiling the Video Service
 
-The following commands can be used to compile the video service:
+The following commands can be used to compile the Video Service:
 
 ```bash
 cd
@@ -64,7 +64,7 @@ In order to start the service, run `start.sh` which is located in the root folde
 
 ## Remote Control Interface
 
-The remote control interface was implemented as a TCP connection. For bidirectional communication, the messages are encoded in JavaScript Object Notation (JSON) format. This is done because the web server is implemented in JavaScript and therefore decoding/parsing of the messages is only necessary in the video service. This simplifies implementation and reduces the susceptibility to errors. The structure of the messages used is shown in the following listing:
+The remote control interface was implemented as a TCP connection. For bidirectional communication, the messages are encoded in JavaScript Object Notation (JSON) format. This is done because the web server of the [Underwater Camera Project](https://underwater-camera-project.github.io) is implemented in JavaScript and therefore decoding/parsing of the messages is only necessary in the Video Service. The structure of the messages used is shown in the following listing:
 
 ```javascript
 {
@@ -77,7 +77,7 @@ Each message consists of a JSON object with two properties. The "type" specifies
 
 ![Communication between the Video Service and a Web Server](images/remote_control_interface_sequence_diagram.png)
 
-The video service informs the web server about the capabilities of the camera module and their current values as soon as the TCP connection has been established. The following shows an abbreviated output of a "capabilities" message. It describes which settings of the camera module can be changed. For each capability, the expected data type, the range in which the value must lie and the default value to be used are specified.
+The Video Service informs the web server about the capabilities of the camera module and their current values as soon as the TCP connection has been established. The following shows an abbreviated output of a "capabilities" message. It describes which settings of the camera module can be changed. For each capability, the expected data type, the range in which the value must lie and the default value to be used are specified.
 
 ```javascript
 {
@@ -100,7 +100,7 @@ The video service informs the web server about the capabilities of the camera mo
 }
 ```
 
-The "currentValues" message is always sent by the video service when the values of the camera properties change. Such a message is shown in the following listing. The capabilities contained in this message and the "capabilities" message depend on the camera module used.
+The "currentValues" message is always sent by the Video Service when the values of the camera properties change. Such a message is shown in the following listing. The capabilities contained in this message and the "capabilities" message depend on the camera module used.
 
 ```javascript
 {

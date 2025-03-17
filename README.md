@@ -35,8 +35,7 @@ ninja -C build install
 # boost
 cd
 wget https://archives.boost.io/release/1.82.0/source/boost_1_82_0.tar.gz
-tar -tf boost_1_82_0.tar.gz
-cd boost_1_82_0
+tar -xf boost_1_82_0.tar.gz
 ``` 
 
 ### Compiling the Video Service

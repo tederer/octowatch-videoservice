@@ -52,15 +52,31 @@ cd octowatch-videoservice
 
 ## Starting the Service
 
-In order to start the service, run `start.sh` which is located in the root folder of this project. The following table lists all the environment variables available to customise the behaviour of the service.
+The following optional environment variables can be used to customize the behaviour of the service.
 
-## Environment Variables
-
-|variable              |range                               |default        |description                                  |
-|----------------------|------------------------------------|---------------|---------------------------------------------|
-|OCTOWATCH_LOG_LEVEL   | [DEBUG, INFO, WARNING, ERROR, OFF] | INFO          | log level                                   |
-|OCTOWATCH_JPEG_QUALITY| integer in the range [0, 100]      | 95            | JPEG image quality                          |
+|variable              |range                               |default        |description                                    |
+|----------------------|------------------------------------|---------------|-----------------------------------------------|
+|OCTOWATCH_LOG_LEVEL   | [DEBUG, INFO, WARNING, ERROR, OFF] | INFO          | log level                                     |
+|OCTOWATCH_JPEG_QUALITY| integer in the range [0, 100]      | 95            | JPEG image quality                            |
 |OCTOWATCH_JPEG_ENCODER| [CPU, emptyString]                 | emptyString   | whether to use CPU or hardware JPEG encoder   |
+
+To start the Video Service manually, execute the `start.sh` script located in the root folder of this project. To enable automatic start at system boot, create a file called `video-service.service` in `/usr/lib/systemd/system` containing the following: replace `<user>`, `<group>` and `<user-home>` with the corresponding values for your system.
+
+```
+[ Unit ]
+Description = OctoWatch video service
+After = network-online.target
+Wants = network-online.target
+
+[ Service ]
+Type = simple
+User = <user>
+Group =<group>
+ExecStart = <user-home>/octowatch-videoservice/build/video_service
+
+[ Install ]
+WantedBy = multi - user . target
+```
 
 ## Remote Control Interface
 

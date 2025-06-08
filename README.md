@@ -75,7 +75,7 @@ Group =<group>
 ExecStart = <user-home>/octowatch-videoservice/build/video_service
 
 [ Install ]
-WantedBy = multi - user . target
+WantedBy = multi-user.target
 ```
 
 ## Remote Control Interface

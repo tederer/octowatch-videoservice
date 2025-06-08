@@ -29,6 +29,7 @@ apt install git meson pkg-config cmake g++ clang ninja-build \
 cd
 git clone https://git.libcamera.org/libcamera/libcamera.git
 cd libcamera
+git checkout v0.4.0
 meson setup build
 ninja -C build install
 

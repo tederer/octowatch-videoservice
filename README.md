@@ -60,11 +60,11 @@ The following optional environment variables can be used to customize the behavi
 |OCTOWATCH_JPEG_QUALITY| integer in the range [0, 100]      | 95            | JPEG image quality                            |
 |OCTOWATCH_JPEG_ENCODER| [CPU, emptyString]                 | emptyString   | whether to use CPU or hardware JPEG encoder   |
 
-To start the Video Service manually, execute the `start.sh` script located in the root folder of this project. To enable automatic start at system boot, create a file called `video-service.service` in `/usr/lib/systemd/system` containing the following: replace `<user>`, `<group>` and `<user-home>` with the corresponding values for your system.
+To start the Video Service manually, execute the `start.sh` script located in the root folder of this project. To enable automatic start at system boot, create a file called `octowatch-video.service` in `/usr/lib/systemd/system` containing the following: replace `<user>`, `<group>` and `<user-home>` with the corresponding values for your system.
 
 ```
 [ Unit ]
-Description = OctoWatch video service
+Description = OctoWatch Video Service
 After = network-online.target
 Wants = network-online.target
 

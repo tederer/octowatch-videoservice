@@ -12,6 +12,8 @@ using logging::Logger;
 
 using namespace std::chrono_literals;
 
+int TcpConnection::nextConnectionId = 0;
+
 std::unique_ptr<TcpConnection> TcpConnection::create(
    boost::asio::io_context& ioContext, const std::string& name) {
    return std::unique_ptr<TcpConnection>(new TcpConnection(ioContext, name));
@@ -29,22 +31,24 @@ void TcpConnection::start( std::function<void()> connectionClosedCallback,
 }
 
 TcpConnection::TcpConnection( boost::asio::io_context& ioContext, const std::string& name) 
-   :  log((std::string("TcpConnection-").append(name)).c_str()), 
+   :  log((std::string("TcpConnection-").append(name).append("-").append(std::to_string(nextConnectionId++))).c_str()), 
       ioContext(ioContext),
       pendingOutputByteCount(0), 
-      aborted(false),
       closed(false),
+	  connectionLost(false),
       socket(ioContext),
       readBuffer(),      
       writeBuffer(boost::asio::const_buffer())
-      {}
+      {
+		  nextConnectionId = nextConnectionId % 1000;
+	  }
 
 TcpConnection::~TcpConnection() {
    close();
 }
 
 void TcpConnection::sendQueuedData() {
-   if (closed) {
+   if (closed || connectionLost) {
       return;
    }
    
@@ -84,7 +88,7 @@ void TcpConnection::send(boost::asio::const_buffer& buffer) {
 }
 
 void TcpConnection::asyncSend(const std::string& message) {
-   if (closed) {
+   if (closed || connectionLost) {
       return;
    }
    
@@ -98,7 +102,7 @@ void TcpConnection::asyncSend(const std::string& message) {
 }   
 
 void TcpConnection::asyncSend(void *mem, size_t size) {
-   if (closed) {
+   if (closed || connectionLost) {
       return;
    }
    
@@ -110,7 +114,7 @@ void TcpConnection::asyncSend(void *mem, size_t size) {
 }
 
 void TcpConnection::asyncSendAndFree(void *mem, size_t size) {
-   if (closed) {
+   if (closed || connectionLost) {
       return;
    }
    
@@ -153,7 +157,12 @@ void TcpConnection::close() {
 
 void TcpConnection::onWriteComplete(const boost::system::error_code& error, 
                                     size_t bytes_transferred) {
+   if (connectionLost) {
+      log.info("ignoring write complete information because connection got lost");
+      return;
+   }
    if (error) {
+      connectionLost = true;
       log.error("failed to write:", error.message());
       close();
       return;
@@ -175,6 +184,10 @@ void TcpConnection::onWriteComplete(const boost::system::error_code& error,
 }
 
 void TcpConnection::readNextLine() {
+   if (connectionLost) {
+      log.info("ignoring request to read next line because connection got lost");
+      return;
+   }
    log.debug("starting to read next line");
    boost::asio::async_read_until(socket, readBuffer, "\n",
       std::bind(&TcpConnection::onReadLineComplete, this, 
@@ -183,13 +196,18 @@ void TcpConnection::readNextLine() {
   
 void TcpConnection::onReadLineComplete(const boost::system::error_code& error, 
                                        size_t bytes_transferred) {
+   if (connectionLost) {
+      log.info("ignoring read line because connection got lost");
+      return;
+   }
+   
    if (error == boost::asio::error::operation_aborted) {
       log.info("operation aborted");
-      aborted = true;
       return;
    }
    
    if (error) {
+      connectionLost = true;
       log.error("failed to read:", error.message());
       close();
    } else {

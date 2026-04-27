@@ -66,6 +66,9 @@ MultipartJpegHttpStream::MultipartJpegHttpStream(StreamConfiguration const &stre
 
 MultipartJpegHttpStream::~MultipartJpegHttpStream() {
    connectedCallback(false);
+   if (connection != nullptr) {
+      connection.reset(); 
+   }
    if (tcpServer) {
       tcpServer->stop();
    }

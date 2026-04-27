@@ -110,7 +110,7 @@ bool Camera::initialize() {
    
    log.info("generating configuration");
    streamConfigs = camera->generateConfiguration({ libcamera::StreamRole::Raw, libcamera::StreamRole::Viewfinder });
-
+   
    log.info("default config for stream raw and viewfinder stream role:");
    for (auto streamConfig : *streamConfigs) {
       log.info("   stream config:", streamConfig.toString());
@@ -124,7 +124,14 @@ bool Camera::initialize() {
       return false;
    }
    
+   //streamConfigs->at(HIGH_RESOLUTION).pixelFormat = libcamera::formats::YUV420;
+   //streamConfigs->at(HIGH_RESOLUTION).size.width  = 1920;
+   //streamConfigs->at(HIGH_RESOLUTION).size.height = 1080;
+   //streamConfigs->at(HIGH_RESOLUTION).colorSpace  = libcamera::ColorSpace::Rec709;
+                                            
    streamConfigs->at(HIGH_RESOLUTION).pixelFormat = libcamera::formats::YUV420;
+   //streamConfigs->at(HIGH_RESOLUTION).size.width  = 4608;
+   //streamConfigs->at(HIGH_RESOLUTION).size.height = 2592;
    streamConfigs->at(HIGH_RESOLUTION).size.width  = 1920;
    streamConfigs->at(HIGH_RESOLUTION).size.height = 1080;
    streamConfigs->at(HIGH_RESOLUTION).colorSpace  = libcamera::ColorSpace::Rec709;
@@ -134,9 +141,13 @@ bool Camera::initialize() {
    streamConfigs->at(LOW_RESOLUTION).size.height  = 608;
    streamConfigs->at(LOW_RESOLUTION).colorSpace   = libcamera::ColorSpace::Rec709;
                                            
-   streamConfigs->sensorConfig                    = libcamera::SensorConfiguration();
-	streamConfigs->sensorConfig->outputSize        = libcamera::Size(1920, 1080);
-	streamConfigs->sensorConfig->bitDepth          = 12;
+   //streamConfigs->sensorConfig                    = libcamera::SensorConfiguration();
+   //streamConfigs->sensorConfig->outputSize        = libcamera::Size(4608, 2592);
+   //streamConfigs->sensorConfig->bitDepth          = 12;
+	
+   //streamConfigs->sensorConfig                    = libcamera::SensorConfiguration();
+   //streamConfigs->sensorConfig->outputSize        = libcamera::Size(1920, 1080);
+   //streamConfigs->sensorConfig->bitDepth          = 12;
 	
    log.info("validating configuration");
    CameraConfiguration::Status configStatus = streamConfigs->validate();

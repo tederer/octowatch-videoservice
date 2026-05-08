@@ -59,10 +59,12 @@ namespace network {
          
          void onReadLineComplete(const boost::system::error_code& error, size_t bytes_transferred);
 
-         static int                             nextConnectionId;
+         static int getNextConnectionId();
+		 
          logging::Logger                        log;
          boost::asio::io_context&               ioContext;
          size_t                                 pendingOutputByteCount;
+		 bool                                   started;
          bool                                   closed;
          bool                                   connectionLost;
          boost::asio::ip::tcp::socket           socket;

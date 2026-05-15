@@ -18,9 +18,9 @@ The installation of the Video Service consists of two parts: firstly, all the ne
 The following commands can be used to install the required dependencies.
 
 ```bash
-apt update
+sudo apt update
 
-apt install git meson pkg-config cmake g++ clang ninja-build \
+sudo apt install git meson pkg-config cmake g++ clang ninja-build \
     libyuv libyaml-dev python3-yaml python3-ply python3-jinja2 \
     git meson pkg-config cmake g++ clang ninja-build libyaml-dev \
     python3-yaml python3-ply python3-jinja2 wget libjpeg-dev
